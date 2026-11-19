@@ -6,6 +6,7 @@ Panasonic Viera TV Remote entity.
 """
 
 import logging
+import asyncio
 from typing import Any
 from ucapi import StatusCodes
 from ucapi.remote import Attributes, Commands, Features, Options, Remote
@@ -348,6 +349,20 @@ class PanasonicVieraRemote(Remote):
         _LOG.info("[%s] Command: %s %s", self.id, cmd_id, params or "")
 
         try:
+            if params and "sequence" in params:
+                delay = float(params.get("delay", 200)) / 1000
+                keys = [k.strip() for k in params["sequence"].split(",") if k.strip()]
+                _LOG.info("[%s] Executing sequence: %s (delay %.0f ms)", self.id, keys, delay * 1000)
+                for key in keys:
+                    if key not in VIERA_KEYS:
+                        _LOG.warning("[%s] Unknown key in sequence: %s", self.id, key)
+                        return StatusCodes.BAD_REQUEST
+                    success = await self._device.send_key(VIERA_KEYS[key])
+                    if not success:
+                        return StatusCodes.SERVER_ERROR
+                    await asyncio.sleep(delay)
+                return StatusCodes.OK
+
             if cmd_id == Commands.SEND_CMD:
                 if params and "command" in params:
                     key_name = params["command"]
